@@ -49,8 +49,12 @@
             </intent-filter>
         </activity>
 
-        <!-- TODO(ipc-4): объявите ресивер .reminder.ReminderActionReceiver, закрытый для других
-             приложений (см. ReminderActionReceiver.kt). -->
+        <!-- Кнопка «Готово» в уведомлении. exported="false": ресивер вызывает только наш
+             PendingIntent (система отправляет интент от имени приложения), другим приложениям
+             и adb он недоступен. -->
+        <receiver
+            android:name=".reminder.ReminderActionReceiver"
+            android:exported="false" />
 
         <!-- TODO(ipc-5): объявите androidx.core.content.FileProvider с authority
              edu.androidsec.notes.files (см. ShareNote.kt). -->
