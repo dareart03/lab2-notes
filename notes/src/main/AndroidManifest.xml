@@ -26,6 +26,7 @@
             android:name="androidx.profileinstaller.ProfileInstallReceiver"
             tools:ignore="MissingClass"
             tools:node="remove" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -35,7 +36,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- TODO(ipc-3): intent-filter для deep link notes://note/<id> (см. NoteDeepLink.kt). -->
+            <!-- Deep link notes://note/<id>. Фильтр пропускает любые пути этой схемы и хоста,
+                 а сам параметр строго проверяет NoteDeepLink.parse(): некорректный id даёт
+                 сообщение, а не падение и не открывает ничего лишнего. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="notes"
+                    android:host="note" />
+            </intent-filter>
         </activity>
 
         <!-- TODO(ipc-4): объявите ресивер .reminder.ReminderActionReceiver, закрытый для других

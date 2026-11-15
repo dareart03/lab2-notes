@@ -26,6 +26,8 @@ data class NoteUiState(
     val title: String = "",
     val body: String = "",
     val photoPath: String? = null,
+    /** Заметки с таким id нет (например, deep link на удалённую заметку): редактировать нечего. */
+    val notFound: Boolean = false,
 ) {
     val isNew: Boolean get() = noteId == 0L
 
@@ -63,12 +65,9 @@ class NoteViewModel(
         viewModelScope.launch {
             val note = repository.get(noteId)
             if (note == null) {
-                // TODO(ipc-3): заметки с таким id нет (например, deep link на удалённую заметку).
-                // Сейчас открывается пустой редактор, как будто заметка существует, и «Сохранить»
-                // создаст запись с чужим id. Нужно показать сообщение «Заметка не найдена»
-                // (строки note_not_found* уже есть) и не дать редактировать несуществующую запись.
-                // Потребуется поле в NoteUiState и ветка в NoteScreen.
-                _uiState.update { it.copy(isLoading = false) }
+                // Заметки с таким id нет: экран показывает «Заметка не найдена» и не даёт
+                // редактировать несуществующую запись (save() и scheduleReminder() это тоже проверяют).
+                _uiState.update { it.copy(isLoading = false, notFound = true) }
                 return@launch
             }
             _uiState.update {
@@ -87,6 +86,7 @@ class NoteViewModel(
     fun onBodyChange(value: String) = _uiState.update { it.copy(body = value) }
 
     fun save() {
+        if (_uiState.value.notFound) return
         viewModelScope.launch {
             val id = repository.save(_uiState.value.toNote())
             _uiState.update { it.copy(noteId = id) }
@@ -97,7 +97,7 @@ class NoteViewModel(
     fun delete() {
         val state = _uiState.value
         viewModelScope.launch {
-            if (!state.isNew) {
+            if (!state.isNew && !state.notFound) {
                 repository.delete(state.noteId)
                 _events.send(NoteEvent.Message(R.string.note_deleted))
             }
@@ -122,7 +122,7 @@ class NoteViewModel(
     /** Вызывается экраном, когда разрешение на уведомления уже получено. */
     fun scheduleReminder() {
         val state = _uiState.value
-        if (state.isNew) return
+        if (state.isNew || state.notFound) return
         reminderScheduler.schedule(state.noteId, state.title)
         _events.trySend(NoteEvent.Message(R.string.reminder_scheduled))
     }
