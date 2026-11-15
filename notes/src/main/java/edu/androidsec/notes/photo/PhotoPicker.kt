@@ -1,27 +1,26 @@
 package edu.androidsec.notes.photo
 
 import android.net.Uri
-import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 
 /**
- * TODO(ipc-2): выбор фото без разрешений на медиафайлы.
+ * Выбор фото системным Photo Picker: без READ_MEDIA_IMAGES, READ_EXTERNAL_STORAGE и CAMERA.
  *
- * Лекция 5, блок «Scoped storage и Photo Picker (2020–2024)»; проверяется шагом 1 чек-листа
- * (в манифесте нет `READ_MEDIA_IMAGES`, `READ_EXTERNAL_STORAGE`, `CAMERA`).
- *
- * Системный выбор фото (`ActivityResultContracts.PickVisualMedia`) отдаёт `content://`-URI
- * с временным правом на чтение только выбранного файла. Разрешения на всю галерею не нужны.
- * Функция должна возвращать лямбду «открыть выбор фото»; выбранный URI передаётся в [onPicked]
- * (дальше его копирует `PhotoStore`, это уже сделано).
- *
- * Сейчас это заглушка: показывает Toast.
+ * Система отдаёт content://-URI с временным правом на чтение только выбранного файла;
+ * дальше его копирует PhotoStore.
  */
 @Composable
 fun rememberPhotoPicker(onPicked: (Uri) -> Unit): () -> Unit {
-    val context = LocalContext.current
+    val currentOnPicked by rememberUpdatedState(onPicked)
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) currentOnPicked(uri)
+    }
     return {
-        Toast.makeText(context, "TODO(ipc-2): системный выбор фото", Toast.LENGTH_SHORT).show()
+        launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 }
