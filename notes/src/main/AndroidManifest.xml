@@ -56,8 +56,19 @@
             android:name=".reminder.ReminderActionReceiver"
             android:exported="false" />
 
-        <!-- TODO(ipc-5): объявите androidx.core.content.FileProvider с authority
-             edu.androidsec.notes.files (см. ShareNote.kt). -->
+        <!-- Экспорт заметки файлом. exported="false": провайдер недоступен другим приложениям
+             напрямую; получателю выдаётся временное право на чтение одного URI через
+             FLAG_GRANT_READ_URI_PERMISSION (grantUriPermissions). Открыт один каталог:
+             cache/exports/ (см. res/xml/file_paths.xml). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="edu.androidsec.notes.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- TODO(ipc-6): объявите провайдер .provider.TitlesProvider с authority
              edu.androidsec.notes.provider, защищённый signature-разрешением
