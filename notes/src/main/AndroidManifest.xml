@@ -6,9 +6,14 @@
          поэтому CAMERA, READ_MEDIA_IMAGES и READ_EXTERNAL_STORAGE не нужны. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- TODO(ipc-6): объявите здесь собственное разрешение
-         edu.androidsec.notes.permission.READ_NOTES с protectionLevel="signature"
-         (см. TitlesProvider.kt). -->
+    <!-- Собственное разрешение на чтение заголовков. protectionLevel="signature": система выдаёт
+         его только приложению, подписанному тем же ключом, что и «Заметки» (например, :client).
+         Приложение с другой подписью его не получит, а у adb shell его нет. -->
+    <permission
+        android:name="edu.androidsec.notes.permission.READ_NOTES"
+        android:description="@string/permission_read_notes_description"
+        android:label="@string/permission_read_notes_label"
+        android:protectionLevel="signature" />
 
     <application
         android:name=".NotesApp"
@@ -70,9 +75,14 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- TODO(ipc-6): объявите провайдер .provider.TitlesProvider с authority
-             edu.androidsec.notes.provider, защищённый signature-разрешением
-             (см. TitlesProvider.kt). -->
+        <!-- Провайдер заголовков «для своих». exported="true" нужен, чтобы клиент его увидел, а защищают
+             его разрешением android:permission: оно закрывает и чтение, и запись (одного
+             readPermission было бы мало: insert/update/delete остались бы открыты). -->
+        <provider
+            android:name=".provider.TitlesProvider"
+            android:authorities="edu.androidsec.notes.provider"
+            android:exported="true"
+            android:permission="edu.androidsec.notes.permission.READ_NOTES" />
     </application>
 
 </manifest>

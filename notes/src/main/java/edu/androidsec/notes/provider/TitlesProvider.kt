@@ -2,33 +2,33 @@ package edu.androidsec.notes.provider
 
 import android.content.ContentProvider
 import android.content.ContentValues
+import android.content.UriMatcher
 import android.database.Cursor
+import android.database.MatrixCursor
 import android.net.Uri
+import android.os.Binder
+import android.provider.BaseColumns
+import android.util.Log
+import edu.androidsec.notes.appContainer
 
 /**
- * TODO(ipc-6): провайдер заголовков «для своих».
+ * Провайдер заголовков «для своих».
  *
- * Лекция 6, блоки «ContentProvider: exported, read/write permissions» и «Кто вызывает:
- * Binder.getCallingUid»; лекция 5, блок «Custom permissions и signature»; проверяется шагом 7
- * чек-листа.
+ * Защита построена на двух уровнях:
+ * 1. В манифесте провайдер закрыт `android:permission` с собственным разрешением
+ *    [PERMISSION] уровня `signature`: его получает только приложение, подписанное тем же ключом.
+ *    Это же разрешение закрывает и запись, поэтому insert/update/delete чужому не доступны.
+ * 2. В коде провайдер всё равно минимален: отдаёт только путь `/notes`, только колонки `_id`
+ *    и `title`, и только на чтение (insert/update/delete бросают исключение).
  *
- * - Объявите в манифесте `<permission>` с именем [PERMISSION] и `protectionLevel="signature"`:
- *   его получат только приложения, подписанные тем же ключом, что и «Заметки».
- * - Объявите провайдер: authority [AUTHORITY], экспортирован (иначе клиент его не увидит)
- *   и защищён этим разрешением. Одного `readPermission` мало: запись останется открытой.
- * - Реализуйте [query]: только путь `/notes` (`UriMatcher`), только колонки `_id` и `title`
- *   (`MatrixCursor`; данные — `requireContext().appContainer.database.noteDao().titlesBlocking()`).
- *   Полезно записать в logcat `Binder.getCallingUid()` и `callingPackage`: кто спрашивает.
- * - Провайдер только для чтения: [insert], [update], [delete] отвергают вызов
- *   (`UnsupportedOperationException`).
- *
- * Проверка: `adb shell content query --uri content://edu.androidsec.notes.provider/notes`
- * даёт `SecurityException` (у shell нет разрешения); модуль `:client` с той же подписью
- * показывает заголовки; тот же модуль с другой подписью получает `SecurityException`.
- *
- * Сейчас это заглушка: `query()` возвращает `null`, провайдер не объявлен в манифесте.
+ * Параметры selection и sortOrder в запросе к базе не используются, поэтому подставить через
+ * них SQL нельзя.
  */
 class TitlesProvider : ContentProvider() {
+
+    private val matcher = UriMatcher(UriMatcher.NO_MATCH).apply {
+        addURI(AUTHORITY, PATH_NOTES, CODE_NOTES)
+    }
 
     override fun onCreate(): Boolean = true
 
@@ -38,20 +38,42 @@ class TitlesProvider : ContentProvider() {
         selection: String?,
         selectionArgs: Array<out String>?,
         sortOrder: String?,
-    ): Cursor? = null
+    ): Cursor? {
+        if (matcher.match(uri) != CODE_NOTES) throw IllegalArgumentException("Unknown URI: $uri")
 
-    override fun getType(uri: Uri): String? = null
+        // Кто спрашивает: в logcat видно uid и пакет вызывающего приложения.
+        Log.i(TAG, "query from uid=${Binder.getCallingUid()} package=$callingPackage")
 
-    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+        val columns = projection?.takeIf { it.isNotEmpty() }?.map { column ->
+            require(column in ALLOWED_COLUMNS) { "Column not allowed: $column" }
+            column
+        } ?: ALLOWED_COLUMNS
+
+        val context = context ?: return null
+        val titles = context.appContainer.database.noteDao().titlesBlocking()
+
+        val cursor = MatrixCursor(columns.toTypedArray(), titles.size)
+        for (note in titles) {
+            cursor.addRow(columns.map { column -> if (column == BaseColumns._ID) note.id else note.title })
+        }
+        return cursor
+    }
+
+    override fun getType(uri: Uri): String? =
+        if (matcher.match(uri) == CODE_NOTES) "vnd.android.cursor.dir/vnd.$AUTHORITY.title" else null
+
+    override fun insert(uri: Uri, values: ContentValues?): Uri? =
+        throw UnsupportedOperationException("TitlesProvider is read-only")
 
     override fun update(
         uri: Uri,
         values: ContentValues?,
         selection: String?,
         selectionArgs: Array<out String>?,
-    ): Int = 0
+    ): Int = throw UnsupportedOperationException("TitlesProvider is read-only")
 
-    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
+    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int =
+        throw UnsupportedOperationException("TitlesProvider is read-only")
 
     companion object {
         const val TAG = "TitlesProvider"
@@ -59,5 +81,8 @@ class TitlesProvider : ContentProvider() {
         const val PERMISSION = "edu.androidsec.notes.permission.READ_NOTES"
         const val PATH_NOTES = "notes"
         const val COLUMN_TITLE = "title"
+
+        private const val CODE_NOTES = 1
+        private val ALLOWED_COLUMNS = listOf(BaseColumns._ID, COLUMN_TITLE)
     }
 }
