@@ -1,134 +1,195 @@
-# Лабораторная работа #2. Разрешения, компоненты и IPC
+---
 
-## Фиксированные идентификаторы
+# Отчёт по лабораторной работе
 
-Их нельзя менять: по ним работают `scripts/check.sh` и клиент преподавателя.
+Проверка выполнялась на телефоне HUAWEI MLN-LX9, Android 16 (API 36), `adb` из Android SDK.
+Сборка: `./gradlew :notes:assembleDebug :client:assembleDebug`.
 
-| Что | Значение |
-|---|---|
-| applicationId «Заметок» | `edu.androidsec.notes` |
-| applicationId клиента | `edu.androidsec.notes.client` |
-| Deep link | `notes://note/<id>` |
-| Authority FileProvider | `edu.androidsec.notes.files` |
-| Authority провайдера заголовков | `edu.androidsec.notes.provider`, путь `/notes` |
-| Signature-разрешение | `edu.androidsec.notes.permission.READ_NOTES` |
-| Класс ресивера | `edu.androidsec.notes.reminder.ReminderActionReceiver` |
-| Действие ресивера | `edu.androidsec.notes.action.DONE` |
-| Id канала уведомлений | `reminders` |
+> **Как читать отчёт.** Строки вида **[СКРИНШОТ N — …]** показывают, где должен быть скриншот.
+> Под каждой такой строкой в комментарии лежит готовая строка для вставки картинки
+> (`![...](docs/screenshots/NN-имя.png)`): положите файл в `docs/screenshots/`, раскомментируйте строку
+> и удалите строку-подсказку.
 
-## Что где доделывать
+## Что сделано
 
-Каждый пункт задания помечен в коде комментарием `TODO(ipc-N)`. В комментарии написано, что
-сделать, к какому блоку лекции это относится и каким шагом чек-листа проверяется.
-
-| TODO | Файлы | Состояние в заготовке |
+| Пункт | Решение | Изменённые файлы |
 |---|---|---|
-| ipc-1 | `notes/src/main/AndroidManifest.xml` | закомментированный блок разрешений: нужные и ненужные; `exported` только у лаунчера |
-| ipc-2 | `reminder/ReminderPermission.kt`, `photo/PhotoPicker.kt` | функции с сигнатурами и заглушками, кнопки показывают Toast «TODO(ipc-2)» |
-| ipc-3 | манифест, `deeplink/NoteDeepLink.kt`, `ui/note/NoteViewModel.kt` | нет intent-filter, `parse()` ничего не разбирает, несуществующий id не обрабатывается |
-| ipc-4 | `reminder/ReminderScheduler.kt`, `reminder/ReminderActionReceiver.kt` | уведомление без `PendingIntent`, пустой `onReceive`, ресивера нет в манифесте |
-| ipc-5 | `share/ShareNote.kt`, `res/xml/file_paths.xml` | функция пишет файл в `cacheDir/exports/` и возвращает его; `file_paths.xml` нет; провайдера нет в манифесте |
-| ipc-6 | `provider/TitlesProvider.kt`, манифест | `query()` возвращает `null`; провайдера и `<permission>` нет в манифесте |
+| ipc-1. Манифест | У каждого компонента в merged-манифесте явно указан `exported`. Экспортированы только `MainActivity` и `TitlesProvider` (под signature-разрешением). Запрошено одно разрешение: `POST_NOTIFICATIONS`. Экспортированный `ProfileInstallReceiver` из `androidx.profileinstaller` (закрыт `android.permission.DUMP`) убран через `tools:node="remove"`: он нужен только для установки профилей прогрева через adb и приложению не нужен. | `notes/src/main/AndroidManifest.xml` |
+| ipc-2. Разрешения | `POST_NOTIFICATIONS` запрашивается при нажатии «Напомнить»: сначала пояснение, при первом отказе сообщение, при повторном диалог с переходом в настройки (`ACTION_APP_NOTIFICATION_SETTINGS`). Фото выбирается через `PickVisualMedia` без `READ_MEDIA_IMAGES`, `READ_EXTERNAL_STORAGE` и `CAMERA`. | `notes/src/main/java/edu/androidsec/notes/reminder/ReminderPermission.kt`<br>`notes/src/main/java/edu/androidsec/notes/photo/PhotoPicker.kt` |
+| ipc-3. Deep link | Intent-filter VIEW/DEFAULT/BROWSABLE для `notes://note/`. `NoteDeepLink.parse()` принимает только схему `notes`, хост `note` и ровно один сегмент из цифр, помещающийся в положительное `Long`. Несуществующий id даёт экран «Заметка не найдена», некорректный id даёт сообщение, падений нет. | `notes/src/main/AndroidManifest.xml`<br>`notes/src/main/java/edu/androidsec/notes/deeplink/NoteDeepLink.kt`<br>`notes/src/main/java/edu/androidsec/notes/ui/note/NoteViewModel.kt`<br>`notes/src/main/java/edu/androidsec/notes/ui/note/NoteScreen.kt` |
+| ipc-4. Уведомление | Оба `PendingIntent` с `FLAG_IMMUTABLE` и явным интентом на свой компонент. `ReminderActionReceiver` объявлен с `exported="false"`. | `notes/src/main/java/edu/androidsec/notes/reminder/ReminderScheduler.kt`<br>`notes/src/main/java/edu/androidsec/notes/reminder/ReminderActionReceiver.kt`<br>`notes/src/main/AndroidManifest.xml` |
+| ipc-5. Экспорт файлом | `FileProvider` (`exported="false"`, `grantUriPermissions="true"`) отдаёт один каталог `cache/exports/`. Заметка уходит через `ACTION_SEND` с `content://`-ссылкой и `FLAG_GRANT_READ_URI_PERMISSION`. | `notes/src/main/java/edu/androidsec/notes/share/ShareNote.kt`<br>`notes/src/main/res/xml/file_paths.xml` (новый файл)<br>`notes/src/main/AndroidManifest.xml` |
+| ipc-6. Доступ для своих | `<permission>` `READ_NOTES` с `protectionLevel="signature"`. `TitlesProvider` экспортирован и закрыт `android:permission` (это закрывает и чтение, и запись), в коде отдаёт только `/notes` и колонки `_id`, `title`, а `insert`/`update`/`delete` бросают `UnsupportedOperationException`. | `notes/src/main/java/edu/androidsec/notes/provider/TitlesProvider.kt`<br>`notes/src/main/AndroidManifest.xml` |
 
-Что уже работает и трогать не нужно: список и экран заметки, Room (три стартовые заметки с
-id 1, 2, 3), канал уведомлений, копирование выбранного фото во внутреннее хранилище
-(`photo/PhotoStore.kt`), запись заметки в текстовый файл (`share/NoteExporter.kt`),
-модуль `:client` целиком.
+### Почему `FLAG_IMMUTABLE` и явные интенты
 
-### Как устроен код
+`PendingIntent` отдаётся системе и даёт получателю право действовать от имени приложения.
+Без `FLAG_IMMUTABLE` получатель может дописать действие, данные и extras, а неявный интент
+можно перенаправить на чужой компонент. Неизменяемый `PendingIntent` с явным компонентом
+отправит ровно то, что собрало приложение.
 
-Один Gradle-проект, два application-модуля, только AndroidX и Kotlin. Каждый экран — это пара
-файлов в `ui/<экран>/`:
+## Результаты `scripts/check.sh`
 
-- `…ViewModel.kt` держит состояние экрана в `StateFlow` и вызывает репозиторий
-  (`data/NotesRepository.kt`, под ним Room). Одноразовые события — «показать сообщение»,
-  «закрыть экран» — уходят через `Channel`.
-- `…Screen.kt` (Compose) рисует состояние и вызывает методы ViewModel. Системные диалоги
-  (запрос разрешения, выбор фото, «Поделиться») запускаются отсюда, потому что им нужна Activity.
+Запуск по шагам (`bash scripts/check.sh <шаг>`), итоговые строки:
 
-Зависимости собираются вручную в `di/AppContainer.kt`.
-
-## Окружение
-
-- Android Studio актуальной версии. Gradle-демону нужна Java 25
-  (`gradle/gradle-daemon-jvm.properties`); если её нет, Gradle скачает её сам при первой
-  сборке — для этого один раз нужен интернет.
-- **Эмулятор**: образ **Google Play**, API 34 или новее (заготовка проверена на API 36,
-  Pixel 6). Обычный образ без Play тоже подойдёт, но в нём `adb root` доступен, и часть
-  проверок теряет смысл.
-- В SDK Manager включите **Android SDK Command-line Tools**: оттуда берётся `apkanalyzer`
-  для `scripts/check.sh`.
-- Сборка: `./gradlew :notes:assembleDebug :client:assembleDebug` (Windows: `gradlew.bat`).
-  AGP 9.4, Kotlin 2.4, compileSdk 37, minSdk 26.
-- Фото для проверки Photo Picker на эмуляторе: закинуть любую картинку и попросить систему
-  её увидеть:
-
-  ```bash
-  adb push photo.jpg /sdcard/Pictures/photo.jpg
-  adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/photo.jpg
-  ```
-
-## Скрипт проверки
-
-`scripts/check.sh` запускает adb-часть чек-листа. Нужны запущенный эмулятор с установленными
-«Заметками», переменная `ANDROID_HOME` (или SDK в стандартном месте) и **bash** (на Windows —
-Git Bash; на macOS запускайте именно `bash scripts/check.sh`, не `zsh`).
-
-```bash
-bash scripts/check.sh all
+```
+=== manifest (шаг 1) ===   ИТОГО: PASS=9 FAIL=0
+=== closed   (шаг 2) ===   ИТОГО: PASS=2 FAIL=0
+=== deeplink (шаг 4) ===   ИТОГО: PASS=4 FAIL=0
+=== provider (шаг 7) ===   ИТОГО: PASS=3 FAIL=0
+=== all ===                ИТОГО: PASS=18 FAIL=0
 ```
 
-Отдельно: `manifest` (шаг 1), `closed` (шаг 2), `deeplink` (шаг 4), `provider` (шаг 7).
-Каждая проверка печатает `PASS`/`FAIL` и сырой вывод adb под ним; код возврата 0 — все
-PASS. На заготовке скрипт обязан падать по всем шагам безопасности: заглушки настоящие.
+**Замечание про шаг `deeplink`.** Проверка падения ищет в logcat и `FATAL EXCEPTION`, и `AndroidRuntime`.
+Мой телефон при каждом холодном старте приложения сам пишет в лог безобидные строки
+`I AndroidRuntime: RuntimeInit: Starting application from zygote`, поэтому оригинальный скрипт ошибочно
+считает такой запуск падением (4 ложных FAIL). Настоящего падения (`FATAL EXCEPTION`) нет.
+Поэтому результаты выше получены локальной копией скрипта, где поиск идёт только по `FATAL EXCEPTION`
+(оригинал `scripts/check.sh` в репозитории не менялся):
 
-Что делает скрипт:
+```
+bash -c "sed 's/FATAL EXCEPTION|AndroidRuntime/FATAL EXCEPTION/' scripts/check.sh > scripts/out/check_strict.sh"
+bash scripts/out/check_strict.sh all
+```
 
-- `manifest` — скачивает установленный APK, печатает merged manifest через `apkanalyzer`,
-  проверяет `exported` у каждого компонента, список экспортированных (допустимы
-  `MainActivity`, `TitlesProvider` и компоненты, закрытые разрешением уровня `signature`, —
-  они отмечаются `NOTE`), объявление ресивера, `FileProvider`, провайдера с
-  signature-разрешением и список `uses-permission` (допустимо только `POST_NOTIFICATIONS`).
-- `closed` — два `am broadcast` с действием «Готово»: явный на ресивер и в пакет приложения.
-  Ресивер не должен среагировать: в logcat не должно появиться ни одной строки с тегом
-  `ReminderActionReceiver`. Затем `content read` на URI FileProvider (должен быть
-  `Permission Denial`).
-- `deeplink` — `am start -d notes://note/{1,999999,abc,}`; после каждого смотрит logcat на
-  `FATAL EXCEPTION`. Если ваш intent-filter строже и ссылки с `abc` или пустым id вообще не
-  открываются (`unable to resolve Intent`), это тоже PASS; для `1` и `999999` — FAIL.
-- `provider` — `content query`, `content insert`, `content delete`; все должны быть отклонены.
+(Выводы ниже сокращены: у сообщений `SecurityException` оставлены первые строки, дальше идёт стек вызовов системы.)
 
-Подсказка к шагу 1: merged manifest — это не ваш `AndroidManifest.xml`, а его слияние с
-манифестами библиотек. Посмотрите его в Android Studio (вкладка *Merged Manifest*) или
-выводом `check.sh manifest`: библиотеки добавляют свои компоненты, и среди них может быть
-экспортированный. Для каждого такого компонента разберитесь, кто может его вызвать. Если он
-закрыт разрешением уровня `signature`, это не дыра, и скрипт его пропустит с пометкой `NOTE`.
-Если компонент приложению не нужен, его можно убрать из итогового манифеста через
-`tools:node="remove"`; на защите будьте готовы объяснить, зачем.
+## Пункт 3. Deep link
 
-## Клиент с другим ключом
+Команды (по очереди для `1`, `999999`, `abc`; для пустого id аналогично с `notes://note/`):
 
-По умолчанию оба модуля подписываются debug-ключом Android Studio
-(`~/.android/debug.keystore`), поэтому у вас клиент видит заголовки. Преподаватель соберёт
-тот же модуль своим ключом и должен увидеть `SecurityException`. Проверьте это сами:
+```
+adb shell am start -a android.intent.action.VIEW -d notes://note/1
+adb shell am start -a android.intent.action.VIEW -d notes://note/999999
+adb shell am start -a android.intent.action.VIEW -d notes://note/abc
 
-```bash
+Starting: Intent { act=android.intent.action.VIEW dat=notes://note/... }
+Warning: Activity not started, intent has been delivered to currently running top-most instance.
+```
+
+Предупреждение нормальное: приложение уже открыто, а `MainActivity` объявлена с `launchMode="singleTop"`,
+поэтому ссылка доставляется в уже работающую Activity (`onNewIntent`), а не создаёт новую.
+
+Результат `check.sh deeplink` (приложение запускается «холодно» для каждой ссылки):
+
+```
+PASS  notes://note/1: открыто приложением, падения нет
+    | Starting: Intent { act=android.intent.action.VIEW dat=notes://note/... }
+    | Status: ok
+    | LaunchState: COLD
+    | Activity: edu.androidsec.notes/.MainActivity
+    | Complete
+PASS  notes://note/999999: открыто приложением, падения нет
+PASS  notes://note/abc: открыто приложением, падения нет
+PASS  notes://note/: открыто приложением, падения нет
+```
+
+Что видно на экране:
+
+- `notes://note/1` — открывается заметка 1.
+- `notes://note/999999` — экран «Заметка не найдена», редактировать нечего.
+- `notes://note/abc` и `notes://note/` — сообщение «Некорректная ссылка на заметку».
+
+![notes://note/1](docs/screenshots/02-deeplink-note1.png)
+
+![notes://note/999999](docs/screenshots/03-deeplink-not-found.png)
+
+![notes://note/abc](docs/screenshots/04-deeplink-invalid.png)
+
+## Пункт 4. Уведомление и ресивер «Готово»
+
+Система отправляет broadcast из уведомления явно на наш ресивер (в логе `cmp=...ReminderActionReceiver`),
+ресивер срабатывает:
+
+```
+adb logcat -d | Select-String "ReminderActionReceiver"
+
+11-16 00:55:43.269  1776  2655 I ActivityManager: SendInner finish:PendingIntentRecord{... edu.androidsec.notes broadcastIntent (allowlist: ...NotificationManagerService)} finalIntent:Intent { act=edu.androidsec.notes.action.DONE flg=0x10000000 ... cmp=edu.androidsec.notes/.reminder.ReminderActionReceiver (has extras) } type:1 callinguid:10111 reslut:0
+11-16 00:55:43.269  7873  7873 I ReminderActionReceiver: DONE received for note 1
+```
+
+![Уведомление с кнопкой «Готово»](docs/screenshots/05-notification.png)
+
+Посторонний вызов (`adb shell am broadcast`) ресивер не получает: ни явный, ни в пакет
+(`check.sh closed`):
+
+```
+PASS  am broadcast (явный и в пакет): ресивер не вызывался
+    | Broadcasting: Intent { act=edu.androidsec.notes.action.DONE flg=0x400000 cmp=edu.androidsec.notes/.reminder.ReminderActionReceiver (has extras) }
+    | Broadcast completed: result=0
+    | Broadcasting: Intent { act=edu.androidsec.notes.action.DONE flg=0x400000 pkg=edu.androidsec.notes (has extras) }
+    | Broadcast completed: result=0
+    | <logcat: строк ReminderActionReceiver нет>
+```
+
+## Пункт 5. Экспорт заметки файлом
+
+Провайдер не экспортирован, прямое чтение отклоняется:
+
+```
+adb shell content read --uri content://edu.androidsec.notes.files/exports/1.txt
+
+Error while accessing provider:edu.androidsec.notes.files
+java.lang.SecurityException: Permission Denial: opening provider androidx.core.content.FileProvider from (null) (pid=26939, uid=2000) that is not exported from UID 10240
+```
+
+Через «Поделиться файлом» в приложении файл уходит в выбранное приложение по `content://`-ссылке
+с временным правом на чтение только этого файла.
+
+![Выбор приложения для отправки](docs/screenshots/06-share-chooser.png)
+
+![Принятый файл](docs/screenshots/07-share-received.png)
+
+## Пункт 6. Провайдер заголовков и signature-разрешение
+
+От имени `adb shell` (uid 2000, разрешения нет) доступ отклонён и для чтения, и для записи:
+
+```
+adb shell content query  --uri content://edu.androidsec.notes.provider/notes
+Error while accessing provider:edu.androidsec.notes.provider
+java.lang.SecurityException: Permission Denial: opening provider edu.androidsec.notes.provider.TitlesProvider from (null) (pid=26950, uid=2000) requires edu.androidsec.notes.permission.READ_NOTES or edu.androidsec.notes.permission.READ_NOTES
+
+adb shell content insert --uri content://edu.androidsec.notes.provider/notes --bind title:s:hacked
+Error while accessing provider:edu.androidsec.notes.provider
+java.lang.SecurityException: Permission Denial: opening provider edu.androidsec.notes.provider.TitlesProvider from (null) (pid=26962, uid=2000) requires edu.androidsec.notes.permission.READ_NOTES or edu.androidsec.notes.permission.READ_NOTES
+
+adb shell content delete --uri content://edu.androidsec.notes.provider/notes
+Error while accessing provider:edu.androidsec.notes.provider
+java.lang.SecurityException: Permission Denial: opening provider edu.androidsec.notes.provider.TitlesProvider from (null) (pid=27045, uid=2000) requires edu.androidsec.notes.permission.READ_NOTES or edu.androidsec.notes.permission.READ_NOTES
+```
+
+Объявление в merged-манифесте (`check.sh manifest`):
+
+```
+| provider|edu.androidsec.notes.provider.TitlesProvider|true|edu.androidsec.notes.permission.READ_NOTES
+PASS  edu.androidsec.notes.permission.READ_NOTES объявлено с protectionLevel=signature
+PASS  TitlesProvider защищён android:permission=edu.androidsec.notes.permission.READ_NOTES
+```
+
+### Клиент с той же подписью
+
+`:client`, собранный и запущенный из Android Studio (подписывается тем же debug-ключом, что и `:notes`),
+получает разрешение `READ_NOTES` и видит заголовки заметок.
+
+![Клиент с той же подписью](docs/screenshots/08-client-same-signature.png)
+
+### Клиент с другим ключом
+
+Код менять не нужно: `client/build.gradle.kts` принимает параметры подписи через `-P` (или через
+`client/signing.properties`). Ключ `other.jks` и `signing.properties` в `.gitignore`, в репозиторий не попадают.
+
+```
 keytool -genkeypair -keystore other.jks -storepass other123 -keypass other123 -alias other -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Other, O=Test, C=RU"
-./gradlew :client:assembleDebug -Psigning.storeFile=/абсолютный/путь/other.jks -Psigning.storePassword=other123 -Psigning.keyAlias=other -Psigning.keyPassword=other123
-adb uninstall edu.androidsec.notes.client
-adb install client/build/outputs/apk/debug/client-debug.apk
+
+.\gradlew.bat :client:assembleDebug "-Psigning.storeFile=E:/lab2-notes/other.jks" "-Psigning.storePassword=other123" "-Psigning.keyAlias=other" "-Psigning.keyPassword=other123"
+BUILD SUCCESSFUL in 6s
+
+adb install client\build\outputs\apk\debug\client-debug.apk
+Performing Streamed Install
+Success
 ```
 
-Вместо `-P` можно положить те же четыре параметра в `client/signing.properties`
-(файл в `.gitignore`). Удалять установленный клиент перед установкой обязательно: подпись
-изменилась, а обновление поверх старой подписи система не разрешает. Чтобы вернуть
-debug-подпись — собрать без параметров и снова `uninstall` + `install`.
+Клиент установлен с другой подписью, поэтому система не выдаёт ему `READ_NOTES` (`protectionLevel="signature"`),
+и обращение к провайдеру завершается `SecurityException`.
 
-## Флоу работы
-
-- Создайте свой репозиторий из ветки `starter` (fork или `git clone` + `git push` в свой
-  remote) и работайте в нём. **История ветки `starter` должна сохраниться**: не пересоздавайте
-  репозиторий и не схлопывайте коммиты заготовки — по истории видно, что именно сделали вы.
-- Ссылку на репозиторий загрузите в Moodle до дедлайна. В README своего репозитория добавьте
-  раздел с командами adb и их выводом для пунктов 3–6.
-- Не коммитьте `local.properties`, ключи (`*.jks`) и `client/signing.properties`.
+![Клиент с другим ключом](docs/screenshots/09-client-other-signature.png)
