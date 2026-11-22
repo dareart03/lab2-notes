@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import edu.androidsec.notes.R
 import edu.androidsec.notes.data.NotesRepository
 import edu.androidsec.notes.domain.Note
+import edu.androidsec.notes.domain.NoteRules
 import edu.androidsec.notes.photo.PhotoStore
 import edu.androidsec.notes.reminder.ReminderScheduler
 import kotlinx.coroutines.channels.Channel
@@ -23,15 +24,11 @@ import kotlinx.coroutines.launch
 data class NoteUiState(
     val noteId: Long,
     val isLoading: Boolean = true,
-    val title: String = "",
-    val body: String = "",
     val photoPath: String? = null,
     /** Заметки с таким id нет (например, deep link на удалённую заметку): редактировать нечего. */
     val notFound: Boolean = false,
 ) {
     val isNew: Boolean get() = noteId == 0L
-
-    fun toNote(): Note = Note(id = noteId, title = title, body = body, photoPath = photoPath)
 }
 
 /** Одноразовые события для экрана: показать сообщение или закрыть экран. */
@@ -46,6 +43,11 @@ class NoteViewModel(
     private val photoStore: PhotoStore,
     private val reminderScheduler: ReminderScheduler,
 ) : ViewModel() {
+
+    /** Поля ввода: текст живёт в [TextFieldState], правила проверяет [NoteRules]. */
+    val title = ValidatedField(NoteRules::checkTitle)
+    val body = ValidatedField(NoteRules::checkBody)
+    val tags = ValidatedField(NoteRules::checkTags)
 
     private val _uiState = MutableStateFlow(NoteUiState(noteId = noteId))
     val uiState: StateFlow<NoteUiState> = _uiState.asStateFlow()
@@ -70,25 +72,29 @@ class NoteViewModel(
                 _uiState.update { it.copy(isLoading = false, notFound = true) }
                 return@launch
             }
+            title.set(note.title)
+            body.set(note.body)
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    title = note.title,
-                    body = note.body,
                     photoPath = note.photoPath,
                 )
             }
         }
     }
 
-    fun onTitleChange(value: String) = _uiState.update { it.copy(title = value) }
-
-    fun onBodyChange(value: String) = _uiState.update { it.copy(body = value) }
+    /** Заметка из текущего содержимого полей. Теги в базу попадут после миграции (пункт 3). */
+    fun currentNote(): Note = Note(
+        id = _uiState.value.noteId,
+        title = title.text,
+        body = body.text,
+        photoPath = _uiState.value.photoPath,
+    )
 
     fun save() {
         if (_uiState.value.notFound) return
         viewModelScope.launch {
-            val id = repository.save(_uiState.value.toNote())
+            val id = repository.save(currentNote())
             _uiState.update { it.copy(noteId = id) }
             _events.send(NoteEvent.Message(R.string.note_saved))
         }
@@ -123,7 +129,7 @@ class NoteViewModel(
     fun scheduleReminder() {
         val state = _uiState.value
         if (state.isNew || state.notFound) return
-        reminderScheduler.schedule(state.noteId, state.title)
+        reminderScheduler.schedule(state.noteId, title.text)
         _events.trySend(NoteEvent.Message(R.string.reminder_scheduled))
     }
 

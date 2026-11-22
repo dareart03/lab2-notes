@@ -23,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -42,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import edu.androidsec.notes.R
 import edu.androidsec.notes.appContainer
+import edu.androidsec.notes.domain.NoteRules
 import edu.androidsec.notes.photo.PhotoStore
 import edu.androidsec.notes.photo.rememberPhotoPicker
 import edu.androidsec.notes.reminder.rememberNotificationPermission
@@ -71,16 +71,17 @@ fun NoteScreen(noteId: Long, onBack: () -> Unit) {
 
     NoteContent(
         state = state,
+        title = viewModel.title,
+        body = viewModel.body,
+        tags = viewModel.tags,
         photoStore = container.photoStore,
         onBack = onBack,
         onDelete = viewModel::delete,
-        onTitleChange = viewModel::onTitleChange,
-        onBodyChange = viewModel::onBodyChange,
         onAttachPhoto = pickPhoto,
         onRemovePhoto = viewModel::removePhoto,
         onSave = viewModel::save,
         onRemind = requestNotificationPermission,
-        onShare = { ShareNote.shareNoteAsFile(context, state.toNote()) },
+        onShare = { ShareNote.shareNoteAsFile(context, viewModel.currentNote()) },
     )
 }
 
@@ -88,11 +89,12 @@ fun NoteScreen(noteId: Long, onBack: () -> Unit) {
 @Composable
 private fun NoteContent(
     state: NoteUiState,
+    title: ValidatedField,
+    body: ValidatedField,
+    tags: ValidatedField,
     photoStore: PhotoStore,
     onBack: () -> Unit,
     onDelete: () -> Unit,
-    onTitleChange: (String) -> Unit,
-    onBodyChange: (String) -> Unit,
     onAttachPhoto: () -> Unit,
     onRemovePhoto: () -> Unit,
     onSave: () -> Unit,
@@ -148,20 +150,9 @@ private fun NoteContent(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedTextField(
-                        value = state.title,
-                        onValueChange = onTitleChange,
-                        label = { Text(stringResource(R.string.note_field_title)) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = state.body,
-                        onValueChange = onBodyChange,
-                        label = { Text(stringResource(R.string.note_field_body)) },
-                        minLines = 4,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    ValidatedTextField(title, R.string.note_field_title, NoteRules.TITLE_MAX, singleLine = true)
+                    ValidatedTextField(body, R.string.note_field_body, NoteRules.BODY_MAX)
+                    ValidatedTextField(tags, R.string.note_field_tags, maxLength = null, singleLine = true)
 
                     state.photoPath?.let { NotePhoto(path = it, photoStore = photoStore) }
 

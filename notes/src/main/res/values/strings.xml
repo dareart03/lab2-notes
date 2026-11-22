@@ -55,4 +55,30 @@
     <!-- Провайдер заголовков -->
     <string name="permission_read_notes_label">Чтение заголовков заметок</string>
     <string name="permission_read_notes_description">Позволяет приложениям с той же подписью читать список заголовков заметок.</string>
+
+    <!-- ЛР3: поля ввода -->
+    <string name="note_field_tags">Теги</string>
+    <string name="note_tags_hint">До 5 тегов через пробел: a-z, 0-9 и «-»</string>
+    <string name="note_invalid">Заметка не сохранена: проверьте поля</string>
+    <string name="error_title_too_long">Заголовок: не больше 100 символов</string>
+    <string name="error_title_multiline">Заголовок должен быть в одну строку</string>
+    <string name="error_body_too_long">Текст: не больше 5000 символов</string>
+    <string name="error_tags_too_many">Не больше 5 тегов</string>
+    <string name="error_tag_too_long">Тег: не больше 20 символов</string>
+    <string name="error_tag_chars">В тегах допустимы только a-z, 0-9 и «-»; теги разделяются пробелом</string>
+
+    <!-- ЛР3: секретные заметки -->
+    <string name="note_secret">Секретная заметка</string>
+    <string name="note_copy_text">Копировать текст</string>
+    <string name="reminder_secret_text">Секретная заметка</string>
+
+    <!-- ЛР3: поиск и удаление с отменой -->
+    <string name="list_search">Поиск</string>
+    <string name="search_title">Поиск</string>
+    <string name="search_hint">Заголовок или текст</string>
+    <string name="search_empty">Ничего не найдено</string>
+    <string name="sort_title">По заголовку</string>
+    <string name="sort_newest">Сначала новые</string>
+    <string name="sort_oldest">Сначала старые</string>
+    <string name="note_undo">Отменить</string>
 </resources>
