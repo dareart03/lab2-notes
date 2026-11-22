@@ -14,6 +14,7 @@ import edu.androidsec.notes.R
 import edu.androidsec.notes.deeplink.IncomingNote
 import edu.androidsec.notes.ui.list.NotesListScreen
 import edu.androidsec.notes.ui.note.NoteScreen
+import edu.androidsec.notes.ui.search.SearchScreen
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -49,6 +50,13 @@ fun NotesNavHost(
         composable<ListRoute> {
             NotesListScreen(
                 onOpenNote = { id -> navController.navigate(NoteRoute(id)) },
+                onSearch = { navController.navigate(SearchRoute) },
+            )
+        }
+        composable<SearchRoute> {
+            SearchScreen(
+                onOpenNote = { id -> navController.navigate(NoteRoute(id)) },
+                onBack = { navController.popBackStack() },
             )
         }
         composable<NoteRoute> { entry ->

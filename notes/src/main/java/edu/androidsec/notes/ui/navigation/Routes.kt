@@ -7,6 +7,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data object ListRoute
 
+/** Экран поиска, открывается из списка. */
+@Serializable
+data object SearchRoute
+
 /** Экран заметки; `id == NEW_NOTE_ID` — новая заметка. */
 @Serializable
 data class NoteRoute(val id: Long) {

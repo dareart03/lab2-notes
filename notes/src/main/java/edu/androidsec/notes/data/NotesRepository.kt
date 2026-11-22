@@ -6,12 +6,20 @@ import edu.androidsec.notes.data.db.toEntity
 import edu.androidsec.notes.domain.InvalidNoteException
 import edu.androidsec.notes.domain.Note
 import edu.androidsec.notes.domain.NoteRules
+import edu.androidsec.notes.domain.NoteSort
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 /** Порт доступа к заметкам. ViewModel-и зависят только от него. */
 interface NotesRepository {
     fun observeAll(): Flow<List<Note>>
+
+    /**
+     * Заметки, в заголовке или тексте которых есть [query] (символы `%`, `_`, `\` ищутся буквально),
+     * в порядке [sort]. Пустой запрос возвращает все заметки.
+     */
+    fun search(query: String, sort: NoteSort): Flow<List<Note>>
+
     suspend fun get(id: Long): Note?
     /**
      * Сохраняет заметку и возвращает её id (для новой заметки — только что выданный).
@@ -25,6 +33,16 @@ class RoomNotesRepository(private val dao: NoteDao) : NotesRepository {
 
     override fun observeAll(): Flow<List<Note>> =
         dao.observeAll().map { list -> list.map { it.toDomain() } }
+
+    override fun search(query: String, sort: NoteSort): Flow<List<Note>> {
+        val pattern = "%${query.escapeForLike()}%"
+        val source = when (sort) {
+            NoteSort.TITLE -> dao.searchByTitle(pattern)
+            NoteSort.NEWEST -> dao.searchNewestFirst(pattern)
+            NoteSort.OLDEST -> dao.searchOldestFirst(pattern)
+        }
+        return source.map { list -> list.map { it.toDomain() } }
+    }
 
     override suspend fun get(id: Long): Note? = dao.getById(id)?.toDomain()
 
