@@ -22,9 +22,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +41,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import edu.androidsec.notes.R
 import edu.androidsec.notes.appContainer
 import edu.androidsec.notes.domain.Note
@@ -43,11 +51,37 @@ import edu.androidsec.notes.ui.navigation.NoteRoute
 @Composable
 fun NotesListScreen(onOpenNote: (Long) -> Unit, onSearch: () -> Unit) {
     val container = LocalContext.current.appContainer
-    val viewModel: NotesListViewModel = viewModel { NotesListViewModel(container.notesRepository) }
+    val viewModel: NotesListViewModel = viewModel {
+        NotesListViewModel(container.notesRepository, container.pendingDeletions)
+    }
     val notes by viewModel.notes.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val deletedText = stringResource(R.string.note_deleted)
+    val undoText = stringResource(R.string.note_undo)
+
+    // Снекбар живёт ровно столько, сколько осталось до настоящего удаления: нажать «Отменить»
+    // можно, только пока заметка ещё в базе. Заметка, удалённая с экрана заметки, тоже приходит сюда.
+    LaunchedEffect(viewModel) {
+        viewModel.deleteRequests.collect { request ->
+            launch {
+                snackbarHostState.currentSnackbarData?.dismiss()
+                val remaining = request.remainingMillis()
+                if (remaining <= 0) return@launch
+                val result = withTimeoutOrNull(remaining) {
+                    snackbarHostState.showSnackbar(
+                        message = deletedText,
+                        actionLabel = undoText,
+                        duration = SnackbarDuration.Indefinite,
+                    )
+                }
+                if (result == SnackbarResult.ActionPerformed) viewModel.undo(request.id)
+            }
+        }
+    }
 
     NotesListContent(
         notes = notes,
+        snackbarHostState = snackbarHostState,
         onOpen = onOpenNote,
         onAdd = { onOpenNote(NoteRoute.NEW_NOTE_ID) },
         onDelete = viewModel::delete,
@@ -59,12 +93,14 @@ fun NotesListScreen(onOpenNote: (Long) -> Unit, onSearch: () -> Unit) {
 @Composable
 private fun NotesListContent(
     notes: List<Note>?,
+    snackbarHostState: SnackbarHostState,
     onOpen: (Long) -> Unit,
     onAdd: () -> Unit,
     onDelete: (Long) -> Unit,
     onSearch: () -> Unit,
 ) {
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.list_title)) },

@@ -3,6 +3,7 @@ package edu.androidsec.notes.ui.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import edu.androidsec.notes.data.NotesRepository
+import edu.androidsec.notes.data.PendingDeletions
 import edu.androidsec.notes.domain.Note
 import edu.androidsec.notes.domain.NoteSort
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.stateIn
 
 class SearchViewModel(
     private val repository: NotesRepository,
+    private val pendingDeletions: PendingDeletions,
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -29,6 +31,7 @@ class SearchViewModel(
     val results: StateFlow<List<Note>?> =
         combine(_query, _sort) { query, sort -> query to sort }
             .flatMapLatest { (query, sort) -> repository.search(query, sort) }
+            .combine(pendingDeletions.hidden) { list, hidden -> list.filterNot { it.id in hidden } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue = null)
 
     fun onQueryChange(value: String) {

@@ -42,7 +42,7 @@ fun SearchScreen(
     onBack: () -> Unit,
 ) {
     val container = LocalContext.current.appContainer
-    val viewModel: SearchViewModel = viewModel { SearchViewModel(container.notesRepository) }
+    val viewModel: SearchViewModel = viewModel { SearchViewModel(container.notesRepository, container.pendingDeletions) }
     val query by viewModel.query.collectAsStateWithLifecycle()
     val sort by viewModel.sort.collectAsStateWithLifecycle()
     val results by viewModel.results.collectAsStateWithLifecycle()

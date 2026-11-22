@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import edu.androidsec.notes.R
 import edu.androidsec.notes.data.NotesRepository
+import edu.androidsec.notes.data.PendingDeletions
 import edu.androidsec.notes.domain.InvalidNoteException
 import edu.androidsec.notes.domain.Note
 import edu.androidsec.notes.domain.NoteRules
@@ -45,6 +46,7 @@ class NoteViewModel(
     private val repository: NotesRepository,
     private val photoStore: PhotoStore,
     private val reminderScheduler: ReminderScheduler,
+    private val pendingDeletions: PendingDeletions,
 ) : ViewModel() {
 
     /** Поля ввода: текст живёт в [TextFieldState], правила проверяет [NoteRules]. */
@@ -117,10 +119,8 @@ class NoteViewModel(
     fun delete() {
         val state = _uiState.value
         viewModelScope.launch {
-            if (!state.isNew && !state.notFound) {
-                repository.delete(state.noteId)
-                _events.send(NoteEvent.Message(R.string.note_deleted))
-            }
+            // Не удаляем сразу: экран закрывается, а список покажет снекбар «Заметка удалена» с отменой.
+            if (!state.isNew && !state.notFound) pendingDeletions.schedule(state.noteId)
             _events.send(NoteEvent.Close)
         }
     }

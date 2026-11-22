@@ -2,6 +2,7 @@ package edu.androidsec.notes.di
 
 import android.content.Context
 import edu.androidsec.notes.data.NotesRepository
+import edu.androidsec.notes.data.PendingDeletions
 import edu.androidsec.notes.data.RoomNotesRepository
 import edu.androidsec.notes.data.db.NotesDatabase
 import edu.androidsec.notes.photo.PhotoStore
@@ -26,4 +27,9 @@ class AppContainer(context: Context) {
     val photoStore: PhotoStore by lazy { PhotoStore(appContext) }
 
     val reminderScheduler: ReminderScheduler by lazy { ReminderScheduler(appContext, appScope) }
+
+    /** Отложенное удаление с отменой: один на всё приложение, переживает смену экранов. */
+    val pendingDeletions: PendingDeletions by lazy {
+        PendingDeletions(notesRepository, appScope) { id -> reminderScheduler.cancel(id) }
+    }
 }
