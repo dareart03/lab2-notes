@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import edu.androidsec.notes.R
 import edu.androidsec.notes.data.NotesRepository
+import edu.androidsec.notes.domain.InvalidNoteException
 import edu.androidsec.notes.domain.Note
 import edu.androidsec.notes.domain.NoteRules
 import edu.androidsec.notes.photo.PhotoStore
@@ -94,7 +95,14 @@ class NoteViewModel(
     fun save() {
         if (_uiState.value.notFound) return
         viewModelScope.launch {
-            val id = repository.save(currentNote())
+            val id = try {
+                repository.save(currentNote())
+            } catch (e: InvalidNoteException) {
+                // Экран такой ввод не пропускает; сюда попадаем, только если правила обошли.
+                Log.w(TAG, "Repository rejected note: ${e.error}")
+                _events.send(NoteEvent.Message(R.string.note_invalid))
+                return@launch
+            }
             _uiState.update { it.copy(noteId = id) }
             _events.send(NoteEvent.Message(R.string.note_saved))
         }

@@ -3,7 +3,9 @@ package edu.androidsec.notes.data
 import edu.androidsec.notes.data.db.NoteDao
 import edu.androidsec.notes.data.db.toDomain
 import edu.androidsec.notes.data.db.toEntity
+import edu.androidsec.notes.domain.InvalidNoteException
 import edu.androidsec.notes.domain.Note
+import edu.androidsec.notes.domain.NoteRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -11,7 +13,10 @@ import kotlinx.coroutines.flow.map
 interface NotesRepository {
     fun observeAll(): Flow<List<Note>>
     suspend fun get(id: Long): Note?
-    /** Сохраняет заметку и возвращает её id (для новой заметки — только что выданный). */
+    /**
+     * Сохраняет заметку и возвращает её id (для новой заметки — только что выданный).
+     * @throws InvalidNoteException если заметка нарушает [NoteRules]; в базу такая заметка не попадает.
+     */
     suspend fun save(note: Note): Long
     suspend fun delete(id: Long)
 }
@@ -24,6 +29,11 @@ class RoomNotesRepository(private val dao: NoteDao) : NotesRepository {
     override suspend fun get(id: Long): Note? = dao.getById(id)?.toDomain()
 
     override suspend fun save(note: Note): Long {
+        // Вторая линия защиты: экран можно обойти (другой код, интент, баг), база — нельзя.
+        // Теги проверяются здесь же, как только появятся в заметке (пункт 3).
+        (NoteRules.checkTitle(note.title) ?: NoteRules.checkBody(note.body))
+            ?.let { throw InvalidNoteException(it) }
+
         val stamped = note.copy(updatedAt = System.currentTimeMillis())
         val rowId = dao.upsert(stamped.toEntity())
         return if (note.isNew) rowId else note.id
