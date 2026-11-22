@@ -24,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -62,6 +63,9 @@ fun NoteScreen(noteId: Long, onBack: () -> Unit) {
     }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // Секретная заметка: окно защищено от скриншотов, записи экрана и превью в «Недавних».
+    SecureWindowEffect(enabled = state.isSecret)
+
     // Системные диалоги (разрешение, выбор фото) живут в UI; результат уходит во ViewModel.
     val requestNotificationPermission = rememberNotificationPermission(onGranted = viewModel::scheduleReminder)
     val pickPhoto = rememberPhotoPicker(onPicked = viewModel::onPhotoPicked)
@@ -81,6 +85,7 @@ fun NoteScreen(noteId: Long, onBack: () -> Unit) {
         body = viewModel.body,
         tags = viewModel.tags,
         photoStore = container.photoStore,
+        onSecretChange = viewModel::onSecretChange,
         onBack = onBack,
         onDelete = viewModel::delete,
         onAttachPhoto = pickPhoto,
@@ -88,6 +93,7 @@ fun NoteScreen(noteId: Long, onBack: () -> Unit) {
         onSave = viewModel::save,
         onRemind = requestNotificationPermission,
         onShare = { ShareNote.shareNoteAsFile(context, viewModel.currentNote()) },
+        onCopy = { copyNoteText(context, viewModel.body.text, sensitive = state.isSecret) },
     )
 }
 
@@ -99,6 +105,7 @@ private fun NoteContent(
     body: ValidatedField,
     tags: ValidatedField,
     photoStore: PhotoStore,
+    onSecretChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onDelete: () -> Unit,
     onAttachPhoto: () -> Unit,
@@ -106,6 +113,7 @@ private fun NoteContent(
     onSave: () -> Unit,
     onRemind: () -> Unit,
     onShare: () -> Unit,
+    onCopy: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -160,6 +168,11 @@ private fun NoteContent(
                     ValidatedTextField(body, R.string.note_field_body, NoteRules.BODY_MAX)
                     ValidatedTextField(tags, R.string.note_field_tags, maxLength = null, singleLine = true)
 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.note_secret), modifier = Modifier.weight(1f))
+                        Switch(checked = state.isSecret, onCheckedChange = onSecretChange)
+                    }
+
                     state.photoPath?.let { NotePhoto(path = it, photoStore = photoStore) }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -177,6 +190,9 @@ private fun NoteContent(
                     }
                     OutlinedButton(onClick = onShare, enabled = !state.isNew, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.note_share))
+                    }
+                    OutlinedButton(onClick = onCopy, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.note_copy_text))
                     }
                     if (state.isNew) {
                         Text(stringResource(R.string.note_save_first), style = MaterialTheme.typography.bodySmall)

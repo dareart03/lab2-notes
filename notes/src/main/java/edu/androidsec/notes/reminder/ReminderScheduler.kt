@@ -31,8 +31,18 @@ class ReminderScheduler(
 ) {
     private val jobs = HashMap<Long, Job>()
 
-    fun schedule(noteId: Long, title: String, delayMillis: Long = DEFAULT_DELAY_MILLIS) {
-        val text = title.ifBlank { context.getString(R.string.note_untitled) }
+    fun schedule(
+        noteId: Long,
+        title: String,
+        isSecret: Boolean = false,
+        delayMillis: Long = DEFAULT_DELAY_MILLIS,
+    ) {
+        // Заголовок секретной заметки в уведомление не попадает: его видно на экране блокировки.
+        val text = if (isSecret) {
+            context.getString(R.string.reminder_secret_text)
+        } else {
+            title.ifBlank { context.getString(R.string.note_untitled) }
+        }
         synchronized(jobs) {
             jobs.remove(noteId)?.cancel()
             jobs[noteId] = scope.launch {

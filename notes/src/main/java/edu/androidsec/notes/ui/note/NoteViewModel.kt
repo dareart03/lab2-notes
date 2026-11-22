@@ -27,7 +27,7 @@ data class NoteUiState(
     val noteId: Long,
     val isLoading: Boolean = true,
     val photoPath: String? = null,
-    /** Признак «секретная»: переключатель появится в пункте 6, а пока значение просто не теряется при сохранении. */
+    /** Признак «секретная»: включает защиту экрана от скриншотов и скрывает текст в списке. */
     val isSecret: Boolean = false,
     /** Заметки с таким id нет (например, deep link на удалённую заметку): редактировать нечего. */
     val notFound: Boolean = false,
@@ -139,11 +139,13 @@ class NoteViewModel(
 
     fun removePhoto() = _uiState.update { it.copy(photoPath = null) }
 
+    fun onSecretChange(value: Boolean) = _uiState.update { it.copy(isSecret = value) }
+
     /** Вызывается экраном, когда разрешение на уведомления уже получено. */
     fun scheduleReminder() {
         val state = _uiState.value
         if (state.isNew || state.notFound) return
-        reminderScheduler.schedule(state.noteId, title.text)
+        reminderScheduler.schedule(state.noteId, title.text, state.isSecret)
         _events.trySend(NoteEvent.Message(R.string.reminder_scheduled))
     }
 

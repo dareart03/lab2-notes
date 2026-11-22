@@ -70,6 +70,7 @@
     <!-- ЛР3: секретные заметки -->
     <string name="note_secret">Секретная заметка</string>
     <string name="note_copy_text">Копировать текст</string>
+    <string name="note_copied">Текст скопирован</string>
     <string name="reminder_secret_text">Секретная заметка</string>
 
     <!-- ЛР3: поиск и удаление с отменой -->
