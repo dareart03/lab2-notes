@@ -26,6 +26,8 @@ data class NoteUiState(
     val noteId: Long,
     val isLoading: Boolean = true,
     val photoPath: String? = null,
+    /** Признак «секретная»: переключатель появится в пункте 6, а пока значение просто не теряется при сохранении. */
+    val isSecret: Boolean = false,
     /** Заметки с таким id нет (например, deep link на удалённую заметку): редактировать нечего. */
     val notFound: Boolean = false,
 ) {
@@ -75,20 +77,24 @@ class NoteViewModel(
             }
             title.set(note.title)
             body.set(note.body)
+            tags.set(note.tags)
             _uiState.update {
                 it.copy(
                     isLoading = false,
                     photoPath = note.photoPath,
+                    isSecret = note.isSecret,
                 )
             }
         }
     }
 
-    /** Заметка из текущего содержимого полей. Теги в базу попадут после миграции (пункт 3). */
+    /** Заметка из текущего содержимого полей. */
     fun currentNote(): Note = Note(
         id = _uiState.value.noteId,
         title = title.text,
         body = body.text,
+        tags = tags.text,
+        isSecret = _uiState.value.isSecret,
         photoPath = _uiState.value.photoPath,
     )
 

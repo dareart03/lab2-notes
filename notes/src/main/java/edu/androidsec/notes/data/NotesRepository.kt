@@ -30,11 +30,13 @@ class RoomNotesRepository(private val dao: NoteDao) : NotesRepository {
 
     override suspend fun save(note: Note): Long {
         // Вторая линия защиты: экран можно обойти (другой код, интент, баг), база — нельзя.
-        // Теги проверяются здесь же, как только появятся в заметке (пункт 3).
-        (NoteRules.checkTitle(note.title) ?: NoteRules.checkBody(note.body))
+        NoteRules.validate(note.title, note.body, note.tags)
             ?.let { throw InvalidNoteException(it) }
 
-        val stamped = note.copy(updatedAt = System.currentTimeMillis())
+        val stamped = note.copy(
+            tags = NoteRules.normalizeTags(note.tags),
+            updatedAt = System.currentTimeMillis(),
+        )
         val rowId = dao.upsert(stamped.toEntity())
         return if (note.isNew) rowId else note.id
     }

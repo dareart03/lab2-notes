@@ -4,9 +4,10 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [NoteEntity::class], version = 1, exportSchema = false)
+@Database(entities = [NoteEntity::class], version = 2, exportSchema = false)
 abstract class NotesDatabase : RoomDatabase() {
 
     abstract fun noteDao(): NoteDao
@@ -17,7 +18,21 @@ abstract class NotesDatabase : RoomDatabase() {
         fun create(context: Context): NotesDatabase =
             Room.databaseBuilder(context.applicationContext, NotesDatabase::class.java, NAME)
                 .addCallback(SeedCallback)
+                // fallbackToDestructiveMigration() не используется: при обновлении заметки должны сохраниться.
+                .addMigrations(MIGRATION_1_2)
                 .build()
+
+        /**
+         * Версия 1 → 2: у заметки появились теги и признак «секретная».
+         * Существующие строки сохраняются; старые заметки получают пустые теги и «не секретная».
+         * Типы и DEFAULT совпадают с тем, что Room ожидает по [NoteEntity].
+         */
+        val MIGRATION_1_2: Migration = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE notes ADD COLUMN is_secret INTEGER NOT NULL DEFAULT 0")
+            }
+        }
     }
 
     /**

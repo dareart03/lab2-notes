@@ -71,6 +71,27 @@ class NotesRepositoryValidationTest {
     fun tooLongBodyIsRejected() = assertRejected(FieldError.BODY_TOO_LONG, Note(body = "a".repeat(5001)))
 
     @Test
+    fun tagWithBadCharsIsRejected() = assertRejected(FieldError.TAG_BAD_CHARS, Note(tags = "Kotlin"))
+
+    @Test
+    fun tooManyTagsAreRejected() = assertRejected(FieldError.TAGS_TOO_MANY, Note(tags = "a b c d e f"))
+
+    @Test
+    fun tooLongTagIsRejected() = assertRejected(FieldError.TAG_TOO_LONG, Note(tags = "a".repeat(21)))
+
+    @Test
+    fun tagsAreNormalizedAndSaved() = runBlocking {
+        val id = repository.save(Note(title = "t", tags = "  kotlin   android-sec "))
+        assertEquals("kotlin android-sec", repository.get(id)?.tags)
+    }
+
+    @Test
+    fun secretFlagIsSaved() = runBlocking {
+        val id = repository.save(Note(title = "t", isSecret = true))
+        assertEquals(true, repository.get(id)?.isSecret)
+    }
+
+    @Test
     fun invalidEditDoesNotOverwriteSavedNote() = runBlocking {
         val id = repository.save(Note(title = "Исходный", body = "Текст"))
         try {

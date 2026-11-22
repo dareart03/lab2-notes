@@ -8,6 +8,10 @@ data class Note(
     /** Абсолютный путь к копии фото во внутреннем хранилище приложения или null. */
     val photoPath: String? = null,
     val updatedAt: Long = 0L,
+    /** Теги через пробел, уже нормализованные (см. `NoteRules.normalizeTags`). Пустая строка — тегов нет. */
+    val tags: String = "",
+    /** Секретная заметка: скрывается в списке, защищается от скриншотов (пункт 6). */
+    val isSecret: Boolean = false,
 ) {
     val isNew: Boolean get() = id == 0L
 }

@@ -12,6 +12,10 @@ data class NoteEntity(
     val body: String,
     @ColumnInfo(name = "photo_path") val photoPath: String?,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    // defaultValue нужен, чтобы схема новой базы совпадала со схемой после MIGRATION_1_2
+    // (Room сверяет их при открытии базы).
+    @ColumnInfo(defaultValue = "''") val tags: String = "",
+    @ColumnInfo(name = "is_secret", defaultValue = "0") val isSecret: Boolean = false,
 )
 
 fun NoteEntity.toDomain(): Note = Note(
@@ -20,6 +24,8 @@ fun NoteEntity.toDomain(): Note = Note(
     body = body,
     photoPath = photoPath,
     updatedAt = updatedAt,
+    tags = tags,
+    isSecret = isSecret,
 )
 
 fun Note.toEntity(): NoteEntity = NoteEntity(
@@ -28,4 +34,6 @@ fun Note.toEntity(): NoteEntity = NoteEntity(
     body = body,
     photoPath = photoPath,
     updatedAt = updatedAt,
+    tags = tags,
+    isSecret = isSecret,
 )
