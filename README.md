@@ -1,195 +1,103 @@
----
+# Лабораторная работа №3. Пользовательский ввод и защита интерфейса
 
-# Отчёт по лабораторной работе
-
-Проверка выполнялась на телефоне HUAWEI MLN-LX9, Android 16 (API 36), `adb` из Android SDK.
-Сборка: `./gradlew :notes:assembleDebug :client:assembleDebug`.
-
-> **Как читать отчёт.** Строки вида **[СКРИНШОТ N — …]** показывают, где должен быть скриншот.
-> Под каждой такой строкой в комментарии лежит готовая строка для вставки картинки
-> (`![...](docs/screenshots/NN-имя.png)`): положите файл в `docs/screenshots/`, раскомментируйте строку
-> и удалите строку-подсказку.
+Доработка приложения «Заметки» (ветка `lab3`, основана на моей ЛР2 из ветки `solution`).
+Проверка выполнялась на телефоне HUAWEI MLN-LX9, Android 16 (API 36).
 
 ## Что сделано
 
-| Пункт | Решение | Изменённые файлы |
+| Пункт | Решение | Основные файлы |
 |---|---|---|
-| ipc-1. Манифест | У каждого компонента в merged-манифесте явно указан `exported`. Экспортированы только `MainActivity` и `TitlesProvider` (под signature-разрешением). Запрошено одно разрешение: `POST_NOTIFICATIONS`. Экспортированный `ProfileInstallReceiver` из `androidx.profileinstaller` (закрыт `android.permission.DUMP`) убран через `tools:node="remove"`: он нужен только для установки профилей прогрева через adb и приложению не нужен. | `notes/src/main/AndroidManifest.xml` |
-| ipc-2. Разрешения | `POST_NOTIFICATIONS` запрашивается при нажатии «Напомнить»: сначала пояснение, при первом отказе сообщение, при повторном диалог с переходом в настройки (`ACTION_APP_NOTIFICATION_SETTINGS`). Фото выбирается через `PickVisualMedia` без `READ_MEDIA_IMAGES`, `READ_EXTERNAL_STORAGE` и `CAMERA`. | `notes/src/main/java/edu/androidsec/notes/reminder/ReminderPermission.kt`<br>`notes/src/main/java/edu/androidsec/notes/photo/PhotoPicker.kt` |
-| ipc-3. Deep link | Intent-filter VIEW/DEFAULT/BROWSABLE для `notes://note/`. `NoteDeepLink.parse()` принимает только схему `notes`, хост `note` и ровно один сегмент из цифр, помещающийся в положительное `Long`. Несуществующий id даёт экран «Заметка не найдена», некорректный id даёт сообщение, падений нет. | `notes/src/main/AndroidManifest.xml`<br>`notes/src/main/java/edu/androidsec/notes/deeplink/NoteDeepLink.kt`<br>`notes/src/main/java/edu/androidsec/notes/ui/note/NoteViewModel.kt`<br>`notes/src/main/java/edu/androidsec/notes/ui/note/NoteScreen.kt` |
-| ipc-4. Уведомление | Оба `PendingIntent` с `FLAG_IMMUTABLE` и явным интентом на свой компонент. `ReminderActionReceiver` объявлен с `exported="false"`. | `notes/src/main/java/edu/androidsec/notes/reminder/ReminderScheduler.kt`<br>`notes/src/main/java/edu/androidsec/notes/reminder/ReminderActionReceiver.kt`<br>`notes/src/main/AndroidManifest.xml` |
-| ipc-5. Экспорт файлом | `FileProvider` (`exported="false"`, `grantUriPermissions="true"`) отдаёт один каталог `cache/exports/`. Заметка уходит через `ACTION_SEND` с `content://`-ссылкой и `FLAG_GRANT_READ_URI_PERMISSION`. | `notes/src/main/java/edu/androidsec/notes/share/ShareNote.kt`<br>`notes/src/main/res/xml/file_paths.xml` (новый файл)<br>`notes/src/main/AndroidManifest.xml` |
-| ipc-6. Доступ для своих | `<permission>` `READ_NOTES` с `protectionLevel="signature"`. `TitlesProvider` экспортирован и закрыт `android:permission` (это закрывает и чтение, и запись), в коде отдаёт только `/notes` и колонки `_id`, `title`, а `insert`/`update`/`delete` бросают `UnsupportedOperationException`. | `notes/src/main/java/edu/androidsec/notes/provider/TitlesProvider.kt`<br>`notes/src/main/AndroidManifest.xml` |
+| Поля ввода | Заголовок, текст и новое поле «Теги» переведены на `TextFieldState`. Ограничения задаёт `InputTransformation` по принципу белого списка: при нарушении правила изменение откатывается целиком (`revertAllChanges`), а не «исправляется». Под полем показывается причина отказа, а пока ошибки нет, то счётчик символов или подсказка. | `ui/note/ValidatedField.kt`<br>`ui/note/NoteScreen.kt`<br>`ui/note/NoteViewModel.kt` |
+| Проверка в репозитории | Правила вынесены в `NoteRules` (заголовок до 100 символов в одну строку, текст до 5000, до 5 тегов по 1–20 символов из `a-z`, `0-9`, `-`). `RoomNotesRepository.save()` проверяет их ещё раз и бросает `InvalidNoteException`, поэтому некорректная заметка в базу не попадает, даже если обойти экран. Теги нормализуются (лишние пробелы убираются). | `domain/NoteRules.kt`<br>`data/NotesRepository.kt` |
+| Миграция базы | В `Note` и `NoteEntity` добавлены `tags` и `isSecret`. Версия Room 1 → 2, `MIGRATION_1_2` добавляет две колонки через `ALTER TABLE ... ADD COLUMN ... NOT NULL DEFAULT`. Старые заметки сохраняются (пустые теги, «не секретная»). `fallbackToDestructiveMigration` не используется. | `data/db/NotesDatabase.kt`<br>`data/db/NoteEntity.kt`<br>`domain/Note.kt` |
+| Поиск и сортировка | Новый экран поиска, открывается иконкой лупы в списке. Поиск по заголовку и тексту, сортировка: по заголовку, сначала новые, сначала старые. Символы `%`, `_` и `\` ищутся буквально: `LIKE :pattern ESCAPE '\'`, строка экранируется `escapeForLike()` и передаётся параметром. Сортировка берётся из `enum NoteSort`, каждому значению соответствует свой готовый запрос в `NoteDao`. `@RawQuery` и подстановки имени колонки нет. | `ui/search/*`<br>`data/db/NoteDao.kt`<br>`data/LikeEscape.kt`<br>`domain/NoteSort.kt` |
+| Удаление с отменой | Удаление из списка и с экрана заметки только прячет заметку и показывает снекбар «Заметка удалена» с кнопкой «Отменить». Из базы заметка удаляется через 5 секунд (`PendingDeletions`), после этого отменяется напоминание. «Отменить» возвращает заметку целиком. | `data/PendingDeletions.kt`<br>`ui/list/*`<br>`ui/note/NoteViewModel.kt`<br>`di/AppContainer.kt` |
+| Секретные заметки | Переключатель «Секретная заметка». Пока заметка открыта, окно защищено `FLAG_SECURE` (нет скриншотов и записи экрана, в «Недавних» пустая карточка), у обычных заметок флаг снимается. В списке и в результатах поиска у секретной заметки только заголовок и замок. «Копировать текст» помечает буфер обмена как чувствительный (`EXTRA_IS_SENSITIVE`). В напоминании вместо заголовка секретной заметки текст «Секретная заметка». | `ui/note/SecretNoteSupport.kt`<br>`ui/note/NoteScreen.kt`<br>`ui/list/NotesListScreen.kt`<br>`reminder/ReminderScheduler.kt` |
 
-### Почему `FLAG_IMMUTABLE` и явные интенты
+(Пути даны относительно `notes/src/main/java/edu/androidsec/notes/`.)
 
-`PendingIntent` отдаётся системе и даёт получателю право действовать от имени приложения.
-Без `FLAG_IMMUTABLE` получатель может дописать действие, данные и extras, а неявный интент
-можно перенаправить на чужой компонент. Неизменяемый `PendingIntent` с явным компонентом
-отправит ровно то, что собрало приложение.
+## Тесты
 
-## Результаты `scripts/check.sh`
+| Набор | Что проверяет | Запуск |
+|---|---|---|
+| `NoteRulesTest` (23, JVM) | допустимые значения, превышение длины, неверные символы, неверный тег, слишком много тегов, нормализация | `./gradlew :notes:testDebugUnitTest` |
+| `LikeEscapeTest` (7, JVM) | экранирование `%`, `_`, `\`; порядок замен | то же |
+| `PendingDeletionsTest` (8, JVM) | заметка скрыта сразу, удаляется только после задержки, отмена, повторное удаление, независимость заметок | то же |
+| `NotesRepositoryValidationTest` (11, Room) | некорректная заметка (заголовок, текст, теги) не попадает в базу; неудачная правка не затирает сохранённую заметку | `./gradlew :notes:connectedDebugAndroidTest` |
+| `NotesMigrationTest` (2, Room) | база версии 1 с двумя заметками открывается версией 2: заметки на месте, `tags = ""`, `isSecret = false` | то же |
+| `NoteSearchTest` (15, Room) | поиск по заголовку и тексту, `%` `_` `\` буквально, ввод вроде `' OR 1=1 --`, три сортировки | то же |
 
-Запуск по шагам (`bash scripts/check.sh <шаг>`), итоговые строки:
+## Проверка на телефоне
 
-```
-=== manifest (шаг 1) ===   ИТОГО: PASS=9 FAIL=0
-=== closed   (шаг 2) ===   ИТОГО: PASS=2 FAIL=0
-=== deeplink (шаг 4) ===   ИТОГО: PASS=4 FAIL=0
-=== provider (шаг 7) ===   ИТОГО: PASS=3 FAIL=0
-=== all ===                ИТОГО: PASS=18 FAIL=0
-```
+### 1. Поля ввода
 
-**Замечание про шаг `deeplink`.** Проверка падения ищет в logcat и `FATAL EXCEPTION`, и `AndroidRuntime`.
-Мой телефон при каждом холодном старте приложения сам пишет в лог безобидные строки
-`I AndroidRuntime: RuntimeInit: Starting application from zygote`, поэтому оригинальный скрипт ошибочно
-считает такой запуск падением (4 ложных FAIL). Настоящего падения (`FATAL EXCEPTION`) нет.
-Поэтому результаты выше получены локальной копией скрипта, где поиск идёт только по `FATAL EXCEPTION`
-(оригинал `scripts/check.sh` в репозитории не менялся):
+101 символ в заголовке, перенос строки в заголовке, теги `Kotlin`, `a_b` и шесть тегов отклоняются, под полем видна причина.
 
-```
-bash -c "sed 's/FATAL EXCEPTION|AndroidRuntime/FATAL EXCEPTION/' scripts/check.sh > scripts/out/check_strict.sh"
-bash scripts/out/check_strict.sh all
-```
+![Ошибка под полем ввода](docs/screenshots/lab3-01-input-error.png)
+*Скриншот: экран заметки, под полем показана ошибка (например, «Не больше 5 тегов»).*
 
-(Выводы ниже сокращены: у сообщений `SecurityException` оставлены первые строки, дальше идёт стек вызовов системы.)
+### 2. Тесты
 
-## Пункт 3. Deep link
+![Юнит-тесты](docs/screenshots/lab3-02-tests-jvm.png)
+*Скриншот: окно Run с зелёными `NoteRulesTest`, `LikeEscapeTest`, `PendingDeletionsTest`.*
 
-Команды (по очереди для `1`, `999999`, `abc`; для пустого id аналогично с `notes://note/`):
+![Тесты Room](docs/screenshots/lab3-03-tests-android.png)
+*Скриншот: окно Run с зелёными `NotesRepositoryValidationTest`, `NotesMigrationTest`, `NoteSearchTest`.*
 
-```
-adb shell am start -a android.intent.action.VIEW -d notes://note/1
-adb shell am start -a android.intent.action.VIEW -d notes://note/999999
-adb shell am start -a android.intent.action.VIEW -d notes://note/abc
+### 3. Миграция
 
-Starting: Intent { act=android.intent.action.VIEW dat=notes://note/... }
-Warning: Activity not started, intent has been delivered to currently running top-most instance.
-```
+Покрыта `NotesMigrationTest`; на телефоне новая заметка с тегами создаётся, теги сохраняются после перезапуска.
 
-Предупреждение нормальное: приложение уже открыто, а `MainActivity` объявлена с `launchMode="singleTop"`,
-поэтому ссылка доставляется в уже работающую Activity (`onNewIntent`), а не создаёт новую.
+[Заметка с тегами](docs/screenshots/lab3-04-tags-saved.mp4)
+*Запись экрана: заметка с тегами после повторного открытия.*
 
-Результат `check.sh deeplink` (приложение запускается «холодно» для каждой ссылки):
+### 4. Поиск и сортировка
 
-```
-PASS  notes://note/1: открыто приложением, падения нет
-    | Starting: Intent { act=android.intent.action.VIEW dat=notes://note/... }
-    | Status: ok
-    | LaunchState: COLD
-    | Activity: edu.androidsec.notes/.MainActivity
-    | Complete
-PASS  notes://note/999999: открыто приложением, падения нет
-PASS  notes://note/abc: открыто приложением, падения нет
-PASS  notes://note/: открыто приложением, падения нет
-```
+`%`, `_` и `\` находят только заметки с этими символами; работают три варианта сортировки.
 
-Что видно на экране:
+![Поиск спецсимвола](docs/screenshots/lab3-05-search-percent.png)
+*Скриншот: экран поиска, в строке `%`, в результатах только заметка с этим символом.*
 
-- `notes://note/1` — открывается заметка 1.
-- `notes://note/999999` — экран «Заметка не найдена», редактировать нечего.
-- `notes://note/abc` и `notes://note/` — сообщение «Некорректная ссылка на заметку».
+![Сортировка](docs/screenshots/lab3-06-search-sort.png)
+*Скриншот: экран поиска с выбранной сортировкой (чипы видны).*
 
-![notes://note/1](docs/screenshots/02-deeplink-note1.png)
+### 5. Удаление с отменой
 
-![notes://note/999999](docs/screenshots/03-deeplink-not-found.png)
+«Отменить» возвращает заметку; без отмены заметка исчезает через 5 секунд; при закрытии приложения в эти секунды заметка остаётся на месте.
 
-![notes://note/abc](docs/screenshots/04-deeplink-invalid.png)
+[Снекбар удаления](docs/screenshots/lab3-07-undo-snackbar.mp4)
+*Запись экрана: список со снекбаром «Заметка удалена» и кнопкой «Отменить».*
 
-## Пункт 4. Уведомление и ресивер «Готово»
+### 6. Секретные заметки
 
-Система отправляет broadcast из уведомления явно на наш ресивер (в логе `cmp=...ReminderActionReceiver`),
-ресивер срабатывает:
+![Переключатель секретности](docs/screenshots/lab3-08-secret-switch.png)
+*Скриншот: экран заметки с включённым переключателем «Секретная заметка».*
 
-```
-adb logcat -d | Select-String "ReminderActionReceiver"
+![Скриншот запрещён](docs/screenshots/lab3-09-secret-screenshot-blocked.png)
+*Скриншот: сообщение системы о том, что снимок экрана запрещён политикой безопасности.*
 
-11-16 00:55:43.269  1776  2655 I ActivityManager: SendInner finish:PendingIntentRecord{... edu.androidsec.notes broadcastIntent (allowlist: ...NotificationManagerService)} finalIntent:Intent { act=edu.androidsec.notes.action.DONE flg=0x10000000 ... cmp=edu.androidsec.notes/.reminder.ReminderActionReceiver (has extras) } type:1 callinguid:10111 reslut:0
-11-16 00:55:43.269  7873  7873 I ReminderActionReceiver: DONE received for note 1
-```
+![Недавние приложения](docs/screenshots/lab3-10-secret-recents.png)
+*Скриншот: «Недавние» с пустой карточкой приложения при открытой секретной заметке.*
 
-![Уведомление с кнопкой «Готово»](docs/screenshots/05-notification.png)
+![Список с замком](docs/screenshots/lab3-11-secret-list.png)
+*Скриншот: список заметок, у секретной только заголовок и замок.*
 
-Посторонний вызов (`adb shell am broadcast`) ресивер не получает: ни явный, ни в пакет
-(`check.sh closed`):
+![Уведомление](docs/screenshots/lab3-12-secret-reminder.png)
+*Скриншот: уведомление-напоминание с текстом «Секретная заметка» вместо заголовка.*
 
-```
-PASS  am broadcast (явный и в пакет): ресивер не вызывался
-    | Broadcasting: Intent { act=edu.androidsec.notes.action.DONE flg=0x400000 cmp=edu.androidsec.notes/.reminder.ReminderActionReceiver (has extras) }
-    | Broadcast completed: result=0
-    | Broadcasting: Intent { act=edu.androidsec.notes.action.DONE flg=0x400000 pkg=edu.androidsec.notes (has extras) }
-    | Broadcast completed: result=0
-    | <logcat: строк ReminderActionReceiver нет>
-```
+### 7. Буфер обмена
 
-## Пункт 5. Экспорт заметки файлом
+Метка `EXTRA_IS_SENSITIVE` выставляется при каждом копировании секретной заметки. Проверка не зависит от оформления системы: сразу после `setPrimaryClip` приложение читает метку из буфера обратно и пишет в Logcat (тег `SecretNote`, текст заметки в лог не попадает). У секретной заметки в буфере `flag stored in clipboard=true`, у обычной `false`.
 
-Провайдер не экспортирован, прямое чтение отклоняется:
+Скрытие превью в системной плашке буфера обмена визуально проверить не удалось: на эмуляторе Android 16 плашка не появляется вовсе, а на телефоне HUAWEI её рисует оболочка производителя. В штатном Android 13+ эту метку использует система.
 
-```
-adb shell content read --uri content://edu.androidsec.notes.files/exports/1.txt
+![Метка в буфере обмена](docs/screenshots/lab3-13-clipboard.png)
+*Скриншот: Logcat с фильтром `Clipboard copy`: две обычные заметки (`false`) и одна секретная (`true`).*
 
-Error while accessing provider:edu.androidsec.notes.files
-java.lang.SecurityException: Permission Denial: opening provider androidx.core.content.FileProvider from (null) (pid=26939, uid=2000) that is not exported from UID 10240
-```
+## Известные ограничения
 
-Через «Поделиться файлом» в приложении файл уходит в выбранное приложение по `content://`-ссылке
-с временным правом на чтение только этого файла.
-
-![Выбор приложения для отправки](docs/screenshots/06-share-chooser.png)
-
-![Принятый файл](docs/screenshots/07-share-received.png)
-
-## Пункт 6. Провайдер заголовков и signature-разрешение
-
-От имени `adb shell` (uid 2000, разрешения нет) доступ отклонён и для чтения, и для записи:
-
-```
-adb shell content query  --uri content://edu.androidsec.notes.provider/notes
-Error while accessing provider:edu.androidsec.notes.provider
-java.lang.SecurityException: Permission Denial: opening provider edu.androidsec.notes.provider.TitlesProvider from (null) (pid=26950, uid=2000) requires edu.androidsec.notes.permission.READ_NOTES or edu.androidsec.notes.permission.READ_NOTES
-
-adb shell content insert --uri content://edu.androidsec.notes.provider/notes --bind title:s:hacked
-Error while accessing provider:edu.androidsec.notes.provider
-java.lang.SecurityException: Permission Denial: opening provider edu.androidsec.notes.provider.TitlesProvider from (null) (pid=26962, uid=2000) requires edu.androidsec.notes.permission.READ_NOTES or edu.androidsec.notes.permission.READ_NOTES
-
-adb shell content delete --uri content://edu.androidsec.notes.provider/notes
-Error while accessing provider:edu.androidsec.notes.provider
-java.lang.SecurityException: Permission Denial: opening provider edu.androidsec.notes.provider.TitlesProvider from (null) (pid=27045, uid=2000) requires edu.androidsec.notes.permission.READ_NOTES or edu.androidsec.notes.permission.READ_NOTES
-```
-
-Объявление в merged-манифесте (`check.sh manifest`):
-
-```
-| provider|edu.androidsec.notes.provider.TitlesProvider|true|edu.androidsec.notes.permission.READ_NOTES
-PASS  edu.androidsec.notes.permission.READ_NOTES объявлено с protectionLevel=signature
-PASS  TitlesProvider защищён android:permission=edu.androidsec.notes.permission.READ_NOTES
-```
-
-### Клиент с той же подписью
-
-`:client`, собранный и запущенный из Android Studio (подписывается тем же debug-ключом, что и `:notes`),
-получает разрешение `READ_NOTES` и видит заголовки заметок.
-
-![Клиент с той же подписью](docs/screenshots/08-client-same-signature.png)
-
-### Клиент с другим ключом
-
-Код менять не нужно: `client/build.gradle.kts` принимает параметры подписи через `-P` (или через
-`client/signing.properties`). Ключ `other.jks` и `signing.properties` в `.gitignore`, в репозиторий не попадают.
-
-```
-keytool -genkeypair -keystore other.jks -storepass other123 -keypass other123 -alias other -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Other, O=Test, C=RU"
-
-.\gradlew.bat :client:assembleDebug "-Psigning.storeFile=E:/lab2-notes/other.jks" "-Psigning.storePassword=other123" "-Psigning.keyAlias=other" "-Psigning.keyPassword=other123"
-BUILD SUCCESSFUL in 6s
-
-adb install client\build\outputs\apk\debug\client-debug.apk
-Performing Streamed Install
-Success
-```
-
-Клиент установлен с другой подписью, поэтому система не выдаёт ему `READ_NOTES` (`protectionLevel="signature"`),
-и обращение к провайдеру завершается `SecurityException`.
-
-![Клиент с другим ключом](docs/screenshots/09-client-other-signature.png)
+- `LIKE` и `COLLATE NOCASE` в SQLite не учитывают регистр только для латиницы: «банан» не найдёт «Банан».
+- Поиск идёт и по тексту секретных заметок, значит, по результатам можно угадывать содержимое, хотя сам текст в результатах не показывается. Теги в поиске не участвуют.
+- Заголовок для напоминания выбирается в момент нажатия «Напомнить»: если после этого сделать заметку секретной, уже запланированное уведомление покажет старый заголовок.
+- Если удалить две заметки подряд, снекбар переключается на вторую, и у первой «Отменить» пропадает раньше, чем истекут её 5 секунд.
+- Экспорт файлом (`ShareNote`) из ЛР2 по-прежнему отдаёт секретную заметку целиком: пункт задания его не затрагивал.

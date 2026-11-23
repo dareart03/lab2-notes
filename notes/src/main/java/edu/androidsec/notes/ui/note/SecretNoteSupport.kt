@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.os.Build
 import android.os.PersistableBundle
+import android.util.Log
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -35,22 +36,29 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
+private const val TAG = "SecretNote"
+
 /**
  * Копирует [text] в буфер обмена. Для секретной заметки ([sensitive]) содержимое помечается как
  * чувствительное: с Android 13 система не показывает его в плашке буфера обмена и в предложениях клавиатуры.
  * На более старых версиях метка безвредна, но и не действует.
  */
 fun copyNoteText(context: Context, text: String, sensitive: Boolean) {
+    val key = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ClipDescription.EXTRA_IS_SENSITIVE
+    } else {
+        "android.content.extra.IS_SENSITIVE"
+    }
     val clip = ClipData.newPlainText(context.getString(R.string.app_name), text)
     if (sensitive) {
-        val key = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ClipDescription.EXTRA_IS_SENSITIVE
-        } else {
-            "android.content.extra.IS_SENSITIVE"
-        }
         clip.description.extras = PersistableBundle().apply { putBoolean(key, true) }
     }
-    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+    val clipboard = context.getSystemService(ClipboardManager::class.java)
+    clipboard.setPrimaryClip(clip)
+
+    // Проверка без плашки системы: читаем метку из буфера обратно (сам текст в лог не пишем).
+    val storedFlag = clipboard.primaryClipDescription?.extras?.getBoolean(key, false)
+    Log.d(TAG, "Clipboard copy: sensitive requested=$sensitive, flag stored in clipboard=$storedFlag")
 
     // Начиная с Android 13 система сама показывает подтверждение копирования.
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {

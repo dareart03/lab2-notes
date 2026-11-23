@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -73,12 +74,21 @@ fun SearchScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // Три одинаковые по ширине ячейки, подпись в каждой в две строки.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NoteSort.entries.forEach { option ->
                     FilterChip(
                         selected = sort == option,
                         onClick = { viewModel.onSortChange(option) },
-                        label = { Text(stringResource(option.labelRes())) },
+                        label = {
+                            Text(
+                                text = stringResource(option.labelRes()).replaceFirst(' ', '\n'),
+                                maxLines = 2,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
